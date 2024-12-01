@@ -29,9 +29,8 @@ const readCSV = () => {
 };
 
 app.post('/ask', async (req, res) => {
-  const { question } = req.body;
+  const { question, history = [] } = req.body;
   try {
-    // Read hotel data from CSV
     const hotels = await readCSV();
     const hotelData = hotels
       .map(
@@ -40,23 +39,32 @@ app.post('/ask', async (req, res) => {
       )
       .join('\n');
 
+    const messages = [
+      {
+        role: "system",
+        content: "You are a helpful travel assistant. Use the conversation history and provided hotel data to answer the user's question.",
+      },
+      ...history,
+      {
+        role: "user",
+        content: `Answer the following question based on the conversation history and the hotel data:\n${hotelData}\n\nQuestion: ${question}`,
+      },
+    ];
+
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          content: "You are a helpful travel assistant. Use the provided hotel data to answer the user's question.",
-        },
-        {
-          role: "user",
-          content: `Answer the following question based on the hotel data:\n${hotelData}\n\nQuestion: ${question}`,
-        },
-      ],
+      messages,
       max_tokens: 300,
       temperature: 0.7,
     });
 
-    res.json({ answer: response.choices[0].message.content.trim() });
+    const newHistory = [
+      ...history,
+      { role: "user", content: question },
+      { role: "assistant", content: response.choices[0].message.content.trim() },
+    ];
+
+    res.json({ answer: response.choices[0].message.content.trim(), history: newHistory });
   } catch (error) {
     console.error('Error:', error.message);
     res.status(500).json({ error: 'Something went wrong. Please try again.' });
